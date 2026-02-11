@@ -367,23 +367,14 @@
     fileLabel.textContent = d.name + star;
   }
 
-function saveDocsSoon(){
-  clearTimeout(saveDocsSoon._t);
-  saveDocsSoon._t = setTimeout(() => {
-    const d = getActive();
-    if(d){
-      d.text = ed.value;
-      d.cursor = ed.selectionStart || 0;
-      d.scrollTop = ed.scrollTop || 0;
-      d.scrollLeft = ed.scrollLeft || 0;
-    }
-    localStorage.setItem(KEY_DOCS, JSON.stringify({
-      docs: state.docs,
-      activeId: state.activeId,
-      savedAt: Date.now()
-    }));
-  }, 150);
+function saveDocsNow(){
+  localStorage.setItem(KEY_DOCS, JSON.stringify({
+    docs: state.docs,
+    activeId: state.activeId,
+    savedAt: Date.now()
+  }));
 }
+
 
 
   function saveSettings(){
