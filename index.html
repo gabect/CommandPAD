@@ -1,43 +1,842 @@
-const CACHE = "dospad-cache-v1";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.webmanifest"
-  // Si agregas iconos:
-  // "./icon-192.png",
-  // "./icon-512.png"
-];
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DOSPad</title>
 
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(ASSETS))
-  );
-  self.skipWaiting();
-});
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))))
-    )
-  );
-  self.clients.claim();
-});
+  <style>
+    :root{
+      --bg:#000000;
+      --fg:#00ff00;
+      --muted:#9aa;
+      --border:#1d1d1d;
+      --mono: ui-monospace, Consolas, Menlo, monospace;
+      --mark-bg: rgba(255, 255, 0, 0.25);
+      --mark-border: rgba(255, 255, 0, 0.45);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family:var(--mono);
+      background:#000;
+      color:var(--fg);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
 
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((resp) => {
-        // Cache-as-you-go for same-origin GET
-        try{
-          const url = new URL(event.request.url);
-          if(url.origin === location.origin && event.request.method === "GET"){
-            const copy = resp.clone();
-            caches.open(CACHE).then(c => c.put(event.request, copy));
-          }
-        } catch {}
-        return resp;
-      }).catch(() => cached);
-    })
-  );
-});
+    /* Top bar */
+    .top{
+      display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      background:#050505;
+    }
+    button, select, input[type="color"], input[type="text"]{
+      font-family:var(--mono);
+      border:1px solid var(--border);
+      background:#0a0a0a;
+      color:var(--fg);
+      padding:7px 10px;
+      border-radius:12px;
+      cursor:pointer;
+    }
+    button:active{transform:translateY(1px)}
+    button[aria-pressed="false"]{opacity:.7}
+    .group{
+      display:flex; gap:8px; align-items:center;
+      border:1px solid var(--border);
+      padding:6px 8px;
+      border-radius:14px;
+      background:#070707;
+    }
+    .pill{
+      border:1px solid var(--border);
+      padding:6px 10px;
+      border-radius:999px;
+      color:var(--muted);
+      font-size:12px;
+      background:#060606;
+      user-select:none;
+    }
+    .pill strong{color:var(--fg)}
+    .spacer{flex:1}
+
+    /* Tabs */
+    .tabs{
+      display:flex;
+      gap:6px;
+      align-items:center;
+      padding:8px 12px;
+      border-bottom:1px solid var(--border);
+      background:#030303;
+      overflow:auto;
+      white-space:nowrap;
+    }
+    .tab{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:6px 10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#070707;
+      cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{
+      border-color: color-mix(in srgb, var(--fg) 65%, var(--border));
+      box-shadow: 0 0 0 2px rgba(0,255,0,.08);
+    }
+    .tabName{
+      max-width:220px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .tabClose{
+      width:22px; height:22px;
+      display:inline-flex;
+      align-items:center; justify-content:center;
+      border-radius:8px;
+      border:1px solid var(--border);
+      background:#0a0a0a;
+      font-size:12px;
+      line-height:1;
+    }
+
+    /* Editor overlay (real highlight) */
+    .wrap{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      min-height:0;
+    }
+    .editorShell{
+      position:relative;
+      flex:1;
+      min-height:0;
+      border-bottom:1px solid var(--border);
+    }
+    .highlights, textarea{
+      position:absolute;
+      inset:0;
+      padding:14px;
+      font-family:var(--mono);
+      font-size:15px;
+      line-height:1.5;
+      white-space:pre-wrap;
+      word-wrap:break-word;
+      overflow:auto;
+      tab-size: 2;
+    }
+    .highlights{
+      background:var(--bg);
+      color:var(--fg);
+      pointer-events:none;
+    }
+    textarea{
+      background:transparent;
+      color:transparent;         /* el texto visible lo pinta .highlights */
+      caret-color:var(--fg);     /* pero el cursor sí se ve */
+      border:0;
+      outline:0;
+      resize:none;
+    }
+    mark{
+      background: var(--mark-bg);
+      outline: 1px solid var(--mark-border);
+      color:inherit;
+      border-radius:4px;
+      padding:0 1px;
+    }
+
+    /* Status */
+    .status{
+      display:flex; gap:10px; align-items:center;
+      padding:8px 12px;
+      color:var(--muted);
+      font-size:12px;
+      background:#050505;
+    }
+    .dot{width:7px;height:7px;border-radius:999px;background:var(--muted)}
+    .dot.ok{background:var(--fg); box-shadow:0 0 10px var(--fg);}
+    .right{margin-left:auto; display:flex; gap:12px; align-items:center;}
+
+    /* Small modal (pure CSS-ish) */
+    .findbar{
+      display:none;
+      gap:8px;
+      align-items:center;
+    }
+    .findbar.show{display:flex}
+    .findbar input{
+      width:min(320px, 60vw);
+      cursor:text;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="top">
+    <button id="newBtn" title="Ctrl+N">New</button>
+    <button id="openBtn" title="Ctrl+O">Open</button>
+    <button id="saveBtn" title="Ctrl+S">Save</button>
+
+    <div class="group">
+      <span class="pill">Theme</span>
+      <select id="themeSel">
+        <option value="dos">DOS</option>
+        <option value="amber">Amber</option>
+        <option value="ice">Ice</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input id="bgPick" type="color" title="Background" />
+      <input id="fgPick" type="color" title="Text" />
+    </div>
+
+    <div class="group">
+      <span class="pill">Font</span>
+      <select id="fontSel">
+        <option>12</option><option>13</option><option selected>15</option><option>17</option><option>19</option><option>22</option>
+      </select>
+      <button id="wrapBtn" aria-pressed="true" title="Toggle wrap">Wrap</button>
+    </div>
+
+    <div class="group">
+      <span class="pill">Find</span>
+      <div class="findbar" id="findbar">
+        <input id="findInput" type="text" placeholder="Buscar... (Enter = siguiente)" />
+        <button id="findNextBtn">Next</button>
+        <button id="findCloseBtn">Close</button>
+        <span class="pill" id="findInfo">0</span>
+      </div>
+      <button id="findToggleBtn" title="Ctrl+F" aria-pressed="false">Ctrl+F</button>
+    </div>
+
+    <span class="pill">PWA: <strong id="pwaFlag">…</strong></span>
+    <div class="spacer"></div>
+    <span class="pill">Auto-save + Recovery: <strong>ON</strong></span>
+
+    <input id="fileIn" type="file" accept=".txt,text/plain" hidden>
+    <a id="dl" hidden></a>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+
+  <div class="wrap">
+    <div class="editorShell" id="editorShell">
+      <pre class="highlights" id="highlights"></pre>
+      <textarea id="ed" spellcheck="false"></textarea>
+    </div>
+
+    <div class="status">
+      <span class="dot ok" id="dirtyDot"></span>
+      <span id="dirtyTxt">Saved</span>
+      <span class="right">
+        <span id="meta">Ln 1, Col 1 · 0 chars</span>
+        <span class="pill" id="fileLabel">Untitled.txt</span>
+      </span>
+    </div>
+  </div>
+
+<script>
+(() => {
+  // ====== IDs ======
+  const ed = document.getElementById('ed');
+  const highlights = document.getElementById('highlights');
+  const editorShell = document.getElementById('editorShell');
+
+  const tabsEl = document.getElementById('tabs');
+
+  const fileIn = document.getElementById('fileIn');
+  const dl = document.getElementById('dl');
+
+  const newBtn = document.getElementById('newBtn');
+  const openBtn = document.getElementById('openBtn');
+  const saveBtn = document.getElementById('saveBtn');
+
+  const themeSel = document.getElementById('themeSel');
+  const bgPick = document.getElementById('bgPick');
+  const fgPick = document.getElementById('fgPick');
+
+  const fontSel = document.getElementById('fontSel');
+  const wrapBtn = document.getElementById('wrapBtn');
+
+  const dirtyDot = document.getElementById('dirtyDot');
+  const dirtyTxt = document.getElementById('dirtyTxt');
+  const meta = document.getElementById('meta');
+  const fileLabel = document.getElementById('fileLabel');
+
+  const findToggleBtn = document.getElementById('findToggleBtn');
+  const findbar = document.getElementById('findbar');
+  const findInput = document.getElementById('findInput');
+  const findNextBtn = document.getElementById('findNextBtn');
+  const findCloseBtn = document.getElementById('findCloseBtn');
+  const findInfo = document.getElementById('findInfo');
+
+  const pwaFlag = document.getElementById('pwaFlag');
+
+  // ====== Storage keys ======
+  const KEY_DOCS = "dospad.docs.v2";
+  const KEY_SETTINGS = "dospad.settings.v2";
+
+  // ====== Themes ======
+  const THEMES = {
+    dos:   {bg:"#000000", fg:"#00ff00"},
+    amber: {bg:"#000000", fg:"#ffb000"},
+    ice:   {bg:"#0b1020", fg:"#d6e4ff"}
+  };
+
+  // ====== State ======
+  const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+
+  let settings = {
+    theme: "dos",
+    bg: THEMES.dos.bg,
+    fg: THEMES.dos.fg,
+    font: 15,
+    wrap: true
+  };
+
+  let state = {
+    docs: [],
+    activeId: null,
+    find: { q:"", matches:[], activeIdx:0 }
+  };
+
+  // ====== Helpers ======
+  function escapeHTML(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function setDirty(doc, isDirty){
+    doc.dirty = isDirty;
+    dirtyDot.classList.toggle("ok", !doc.dirty);
+    dirtyTxt.textContent = doc.dirty ? "Unsaved" : "Saved";
+    refreshTitle();
+  }
+
+  function refreshTitle(){
+    const doc = getActive();
+    if(!doc) return;
+    const star = doc.dirty ? " *" : "";
+    document.title = `DOSPad — ${doc.name}${star}`;
+    fileLabel.textContent = doc.name + star;
+  }
+
+  function getActive(){
+    return state.docs.find(d => d.id === state.activeId) || null;
+  }
+
+  function persistAllSoon(){
+    // Debounce autosave like VSCode-ish
+    clearTimeout(persistAllSoon._t);
+    persistAllSoon._t = setTimeout(() => {
+      localStorage.setItem(KEY_DOCS, JSON.stringify({
+        docs: state.docs,
+        activeId: state.activeId,
+        savedAt: Date.now()
+      }));
+    }, 200);
+  }
+
+  function persistSettings(){
+    localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
+  }
+
+  function loadEverything(){
+    // settings
+    try{
+      const rawS = localStorage.getItem(KEY_SETTINGS);
+      if(rawS){
+        const s = JSON.parse(rawS);
+        settings = {...settings, ...s};
+      }
+    } catch {}
+
+    // docs
+    try{
+      const raw = localStorage.getItem(KEY_DOCS);
+      if(raw){
+        const pack = JSON.parse(raw);
+        if(Array.isArray(pack.docs) && pack.docs.length){
+          state.docs = pack.docs;
+          state.activeId = pack.activeId || pack.docs[0].id;
+          return;
+        }
+      }
+    } catch {}
+
+    // fallback: one new doc
+    const first = makeDoc("Untitled.txt", "");
+    state.docs = [first];
+    state.activeId = first.id;
+  }
+
+  function makeDoc(name, text){
+    return {
+      id: uid(),
+      name: name || "Untitled.txt",
+      text: text || "",
+      dirty: false,
+      cursor: 0,
+      lastFind: ""
+    };
+  }
+
+  // ====== Apply UI settings ======
+  function applyColors(bg, fg){
+    document.documentElement.style.setProperty('--bg', bg);
+    document.documentElement.style.setProperty('--fg', fg);
+    ed.style.caretColor = fg;
+    bgPick.value = bg;
+    fgPick.value = fg;
+  }
+
+  function setTheme(name){
+    settings.theme = name;
+    if(name === "custom"){
+      applyColors(settings.bg, settings.fg);
+    } else {
+      const t = THEMES[name] || THEMES.dos;
+      settings.bg = t.bg;
+      settings.fg = t.fg;
+      applyColors(t.bg, t.fg);
+    }
+    persistSettings();
+    renderHighlights(); // re-pintar resaltado por color
+  }
+
+  function setFont(px){
+    settings.font = px;
+    ed.style.fontSize = px + "px";
+    highlights.style.fontSize = px + "px";
+    persistSettings();
+    syncScroll();
+  }
+
+  function setWrap(on){
+    settings.wrap = on;
+    wrapBtn.setAttribute("aria-pressed", String(on));
+    const ws = on ? "pre-wrap" : "pre";
+    ed.style.whiteSpace = ws;
+    highlights.style.whiteSpace = ws;
+    ed.style.overflowX = on ? "hidden" : "auto";
+    persistSettings();
+    renderHighlights();
+  }
+
+  // ====== Tabs ======
+  function renderTabs(){
+    tabsEl.innerHTML = "";
+    for(const d of state.docs){
+      const tab = document.createElement("div");
+      tab.className = "tab" + (d.id === state.activeId ? " active" : "");
+      tab.title = d.name;
+      tab.onclick = () => switchTo(d.id);
+
+      const name = document.createElement("span");
+      name.className = "tabName";
+      name.textContent = d.name + (d.dirty ? " *" : "");
+
+      const close = document.createElement("button");
+      close.className = "tabClose";
+      close.textContent = "×";
+      close.title = "Close tab";
+      close.onclick = (e) => { e.stopPropagation(); closeTab(d.id); };
+
+      tab.appendChild(name);
+      tab.appendChild(close);
+      tabsEl.appendChild(tab);
+    }
+
+    // + tab
+    const add = document.createElement("button");
+    add.textContent = "+";
+    add.title = "New tab";
+    add.onclick = () => newTab();
+    tabsEl.appendChild(add);
+  }
+
+  function switchTo(id){
+    const cur = getActive();
+    if(cur){
+      cur.cursor = ed.selectionStart || 0;
+      cur.text = ed.value;
+    }
+    state.activeId = id;
+    const next = getActive();
+    if(!next) return;
+
+    ed.value = next.text || "";
+    setDirty(next, !!next.dirty);
+    refreshTitle();
+    renderTabs();
+    renderHighlights();
+
+    requestAnimationFrame(() => {
+      const c = Math.min(next.cursor || 0, ed.value.length);
+      ed.setSelectionRange(c, c);
+      updateMeta();
+      syncScroll();
+      ed.focus();
+    });
+
+    persistAllSoon();
+  }
+
+  function newTab(){
+    const d = makeDoc("Untitled.txt", "");
+    state.docs.push(d);
+    state.activeId = d.id;
+    renderTabs();
+    switchTo(d.id);
+  }
+
+  function closeTab(id){
+    if(state.docs.length === 1){
+      // no cierres la última: mejor reset
+      if(confirm("Cerrar la última pestaña borrará el contenido. ¿Continuar?")){
+        const d = state.docs[0];
+        d.text = "";
+        d.name = "Untitled.txt";
+        d.dirty = false;
+        d.cursor = 0;
+        switchTo(d.id);
+      }
+      return;
+    }
+
+    const d = state.docs.find(x => x.id === id);
+    if(d && d.dirty){
+      if(!confirm(`"${d.name}" tiene cambios sin guardar. ¿Cerrar igual?`)) return;
+    }
+
+    const idx = state.docs.findIndex(x => x.id === id);
+    state.docs.splice(idx, 1);
+
+    if(state.activeId === id){
+      const newActive = state.docs[Math.max(0, idx - 1)];
+      state.activeId = newActive.id;
+      switchTo(state.activeId);
+    } else {
+      renderTabs();
+    }
+
+    persistAllSoon();
+  }
+
+  // ====== File open/save ======
+  async function newFile(){
+    const doc = getActive();
+    if(doc && doc.dirty && !confirm("Tienes cambios sin guardar. ¿Descartar?")) return;
+
+    // reset active doc
+    const d = getActive();
+    d.text = "";
+    d.name = "Untitled.txt";
+    d.cursor = 0;
+    setDirty(d, false);
+
+    ed.value = "";
+    renderHighlights();
+    renderTabs();
+    persistAllSoon();
+  }
+
+  function openFile(){
+    fileIn.value = "";
+    fileIn.click();
+  }
+
+  fileIn.addEventListener("change", async () => {
+    const f = fileIn.files && fileIn.files[0];
+    if(!f) return;
+
+    // open into a new tab (like a real editor)
+    const text = await f.text();
+    const d = makeDoc(f.name || "Untitled.txt", text);
+    d.dirty = false;
+
+    state.docs.push(d);
+    state.activeId = d.id;
+    renderTabs();
+    switchTo(d.id);
+    persistAllSoon();
+  });
+
+  function saveFile(){
+    const d = getActive();
+    if(!d) return;
+
+    // Download as .txt (browser-safe)
+    const blob = new Blob([ed.value], {type:"text/plain;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    dl.href = url;
+    dl.download = d.name || "Untitled.txt";
+    dl.click();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+
+    d.text = ed.value;
+    setDirty(d, false);
+    renderTabs();
+    persistAllSoon();
+  }
+
+  // Rename active tab (simple prompt)
+  function renameActive(){
+    const d = getActive();
+    if(!d) return;
+    const name = prompt("Nombre del archivo:", d.name);
+    if(!name) return;
+    d.name = name.endsWith(".txt") ? name : name + ".txt";
+    renderTabs();
+    refreshTitle();
+    persistAllSoon();
+  }
+
+  // ====== Find with real highlight ======
+  function computeMatches(text, q){
+    if(!q) return [];
+    // Escape regexp special
+    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(esc, "gi");
+    const matches = [];
+    let m;
+    while((m = re.exec(text)) !== null){
+      matches.push({start: m.index, end: m.index + m[0].length});
+      // avoid infinite loops
+      if(m.index === re.lastIndex) re.lastIndex++;
+      if(matches.length > 5000) break; // safety
+    }
+    return matches;
+  }
+
+  function renderHighlights(){
+    const text = ed.value || "";
+    const q = state.find.q || "";
+
+    // No highlight query => plain
+    if(!q){
+      highlights.innerHTML = escapeHTML(text) + "\n";
+      return;
+    }
+
+    const matches = state.find.matches;
+    if(!matches.length){
+      highlights.innerHTML = escapeHTML(text) + "\n";
+      return;
+    }
+
+    // Build HTML with <mark> segments
+    let out = "";
+    let last = 0;
+    for(let i=0;i<matches.length;i++){
+      const {start,end} = matches[i];
+      out += escapeHTML(text.slice(last, start));
+      out += "<mark>" + escapeHTML(text.slice(start, end)) + "</mark>";
+      last = end;
+    }
+    out += escapeHTML(text.slice(last));
+    highlights.innerHTML = out + "\n";
+  }
+
+  function openFind(){
+    findToggleBtn.setAttribute("aria-pressed","true");
+    findbar.classList.add("show");
+    findInput.focus();
+    findInput.select();
+  }
+
+  function closeFind(){
+    findToggleBtn.setAttribute("aria-pressed","false");
+    findbar.classList.remove("show");
+    state.find.q = "";
+    state.find.matches = [];
+    state.find.activeIdx = 0;
+    findInfo.textContent = "0";
+    renderHighlights();
+    ed.focus();
+  }
+
+  function updateFind(){
+    const q = findInput.value || "";
+    state.find.q = q;
+    state.find.matches = computeMatches(ed.value, q);
+    state.find.activeIdx = 0;
+    findInfo.textContent = String(state.find.matches.length);
+    renderHighlights();
+    if(state.find.matches.length) jumpToMatch(0);
+  }
+
+  function jumpToMatch(idx){
+    const m = state.find.matches[idx];
+    if(!m) return;
+    ed.focus();
+    ed.setSelectionRange(m.start, m.end);
+    state.find.activeIdx = idx;
+
+    // Scroll so selection is visible (approx)
+    const before = ed.value.slice(0, m.start);
+    const line = before.split("\n").length;
+    ed.scrollTop = Math.max(0, (line - 3) * (settings.font * 1.45));
+    syncScroll();
+    updateMeta();
+  }
+
+  function findNext(){
+    if(!state.find.q) { updateFind(); return; }
+    if(!state.find.matches.length) { updateFind(); return; }
+    const next = (state.find.activeIdx + 1) % state.find.matches.length;
+    jumpToMatch(next);
+  }
+
+  // ====== Scroll sync (textarea <-> highlight layer) ======
+  function syncScroll(){
+    highlights.scrollTop = ed.scrollTop;
+    highlights.scrollLeft = ed.scrollLeft;
+  }
+
+  // ====== Meta ======
+  function updateMeta(){
+    const t = ed.value;
+    const i = ed.selectionStart || 0;
+    const before = t.slice(0,i);
+    const line = before.split("\n").length;
+    const col = before.length - before.lastIndexOf("\n");
+    meta.textContent = `Ln ${line}, Col ${col} · ${t.length} chars`;
+  }
+
+  // ====== Wire events ======
+  newBtn.onclick = newFile;
+  openBtn.onclick = openFile;
+  saveBtn.onclick = saveFile;
+
+  themeSel.onchange = () => setTheme(themeSel.value);
+  bgPick.oninput = () => { settings.theme="custom"; themeSel.value="custom"; settings.bg=bgPick.value; applyColors(settings.bg, settings.fg); persistSettings(); renderHighlights(); };
+  fgPick.oninput = () => { settings.theme="custom"; themeSel.value="custom"; settings.fg=fgPick.value; applyColors(settings.bg, settings.fg); persistSettings(); renderHighlights(); };
+
+  fontSel.onchange = () => setFont(parseInt(fontSel.value,10) || 15);
+
+  wrapBtn.onclick = () => setWrap(!settings.wrap);
+
+  findToggleBtn.onclick = () => {
+    const on = findbar.classList.contains("show");
+    on ? closeFind() : openFind();
+  };
+  findCloseBtn.onclick = closeFind;
+  findNextBtn.onclick = findNext;
+
+  findInput.addEventListener("input", () => updateFind());
+  findInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){ e.preventDefault(); findNext(); }
+    if(e.key === "Escape"){ e.preventDefault(); closeFind(); }
+  });
+
+  ed.addEventListener("scroll", syncScroll);
+  ed.addEventListener("input", () => {
+    const d = getActive();
+    if(!d) return;
+    d.text = ed.value;
+    setDirty(d, true);
+
+    // Recompute find matches while typing (so highlights stay accurate)
+    if(state.find.q){
+      state.find.matches = computeMatches(ed.value, state.find.q);
+      findInfo.textContent = String(state.find.matches.length);
+    }
+
+    renderHighlights();
+    updateMeta();
+    persistAllSoon();
+  });
+
+  ed.addEventListener("click", () => { updateMeta(); });
+  ed.addEventListener("keyup", () => { updateMeta(); });
+
+  // Shortcuts
+  window.addEventListener("keydown", (e) => {
+    if(!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+
+    if(k === "s"){ e.preventDefault(); saveFile(); }
+    if(k === "o"){ e.preventDefault(); openFile(); }
+    if(k === "n"){ e.preventDefault(); newFile(); }
+    if(k === "f"){ e.preventDefault(); openFind(); }
+    if(k === "r"){ /* optional */ }
+
+    // rename: Ctrl+Shift+R (simple)
+    if(e.shiftKey && k === "r"){ e.preventDefault(); renameActive(); }
+  });
+
+  // ====== PWA status + SW registration ======
+  async function initPWA(){
+    // file:// can't do SW
+    if(location.protocol === "file:"){
+      pwaFlag.textContent = "NO (file://)";
+      return;
+    }
+    pwaFlag.textContent = "CHECK…";
+
+    if("serviceWorker" in navigator){
+      try{
+        const reg = await navigator.serviceWorker.register("./sw.js");
+        pwaFlag.textContent = reg.active ? "READY" : "OK";
+      } catch (err){
+        console.error(err);
+        pwaFlag.textContent = "SW FAIL";
+      }
+    } else {
+      pwaFlag.textContent = "NO SW";
+    }
+  }
+
+  // ====== Init ======
+  function init(){
+    loadEverything();
+
+    // Apply settings
+    themeSel.value = settings.theme || "dos";
+    bgPick.value = settings.bg;
+    fgPick.value = settings.fg;
+    setTheme(themeSel.value);
+
+    fontSel.value = String(settings.font || 15);
+    setFont(parseInt(fontSel.value,10) || 15);
+
+    setWrap(settings.wrap !== false);
+
+    // Load active doc into editor
+    const d = getActive();
+    ed.value = d.text || "";
+    setDirty(d, !!d.dirty);
+    renderTabs();
+    refreshTitle();
+
+    // Find highlight initial
+    state.find.q = "";
+    state.find.matches = [];
+    renderHighlights();
+
+    // cursor + meta
+    requestAnimationFrame(() => {
+      const c = Math.min(d.cursor || 0, ed.value.length);
+      ed.setSelectionRange(c, c);
+      updateMeta();
+      syncScroll();
+      ed.focus();
+    });
+
+    initPWA();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
