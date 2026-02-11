@@ -766,22 +766,29 @@ requestAnimationFrame(() => {
   ed.addEventListener("click", updateMeta);
   ed.addEventListener("keyup", updateMeta);
 
-  ed.addEventListener("input", () => {
-    const d = getActive();
-    if(!d) return;
-    d.text = ed.value;
-    setDirty(true);
+ed.addEventListener("input", () => {
+  const d = getActive();
+  if(!d) return;
 
-    if(state.find.q){
-      state.find.matches = computeMatches(ed.value, state.find.q);
-      findCount.textContent = String(state.find.matches.length);
-      if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
-    }
+  d.text = ed.value;
 
-    renderHighlights();
-    updateMeta();
-    saveDocsSoon();
-  });
+  // 1) Guardar instantáneo (autosave)
+  saveDocsNow();
+
+  // 2) Estado: Saved (porque ya persistió)
+  setDirty(false);
+
+  // Si hay búsqueda activa, recalcula
+  if(state.find.q){
+    state.find.matches = computeMatches(ed.value, state.find.q);
+    findCount.textContent = String(state.find.matches.length);
+    if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
+  }
+
+  renderHighlights();
+  updateMeta();
+});
+
 
 function flushSaveNow(){
   const d = getActive();
