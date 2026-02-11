@@ -367,16 +367,24 @@
     fileLabel.textContent = d.name + star;
   }
 
-  function saveDocsSoon(){
-    clearTimeout(saveDocsSoon._t);
-    saveDocsSoon._t = setTimeout(() => {
-      localStorage.setItem(KEY_DOCS, JSON.stringify({
-        docs: state.docs,
-        activeId: state.activeId,
-        savedAt: Date.now()
-      }));
-    }, 200);
-  }
+function saveDocsSoon(){
+  clearTimeout(saveDocsSoon._t);
+  saveDocsSoon._t = setTimeout(() => {
+    const d = getActive();
+    if(d){
+      d.text = ed.value;
+      d.cursor = ed.selectionStart || 0;
+      d.scrollTop = ed.scrollTop || 0;
+      d.scrollLeft = ed.scrollLeft || 0;
+    }
+    localStorage.setItem(KEY_DOCS, JSON.stringify({
+      docs: state.docs,
+      activeId: state.activeId,
+      savedAt: Date.now()
+    }));
+  }, 150);
+}
+
 
   function saveSettings(){
     localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
@@ -512,13 +520,19 @@
     }
 
     renderHighlights();
-    requestAnimationFrame(() => {
-      const c = Math.min(d.cursor || 0, ed.value.length);
-      ed.setSelectionRange(c, c);
-      updateMeta();
-      syncScroll();
-      ed.focus();
-    });
+requestAnimationFrame(() => {
+  const c = Math.min(d.cursor || 0, ed.value.length);
+  ed.setSelectionRange(c, c);
+
+  // Restaurar scroll guardado
+  ed.scrollTop = d.scrollTop || 0;
+  ed.scrollLeft = d.scrollLeft || 0;
+
+  updateMeta();
+  syncScroll();
+  ed.focus();
+});
+
 
     saveDocsSoon();
   }
@@ -778,6 +792,29 @@
     saveDocsSoon();
   });
 
+function flushSaveNow(){
+  const d = getActive();
+  if(d){
+    d.text = ed.value;
+    d.cursor = ed.selectionStart || 0;
+    d.scrollTop = ed.scrollTop || 0;
+    d.scrollLeft = ed.scrollLeft || 0;
+  }
+  localStorage.setItem(KEY_DOCS, JSON.stringify({
+    docs: state.docs,
+    activeId: state.activeId,
+    savedAt: Date.now()
+  }));
+}
+
+window.addEventListener("beforeunload", flushSaveNow);
+// Mejor para móviles/PWA:
+window.addEventListener("pagehide", flushSaveNow);
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "hidden") flushSaveNow();
+});
+
+  
   // Shortcuts
   window.addEventListener("keydown", (e) => {
     if(!(e.ctrlKey || e.metaKey)) return;
