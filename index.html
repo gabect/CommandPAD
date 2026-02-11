@@ -525,7 +525,7 @@ requestAnimationFrame(() => {
 });
 
 
-    saveDocsSoon();
+    saveDocsNow();
   }
 
   function newTab(){
@@ -561,7 +561,7 @@ requestAnimationFrame(() => {
       switchTo(state.activeId);
     } else {
       renderTabs();
-      saveDocsSoon();
+      saveDocsNow();
     }
   }
 
@@ -577,7 +577,7 @@ requestAnimationFrame(() => {
     renderTabs();
     renderHighlights();
     updateMeta();
-    saveDocsSoon();
+    saveDocsNow();
   }
 
   function openFile(){
@@ -610,7 +610,7 @@ requestAnimationFrame(() => {
     d.text = ed.value;
     setDirty(false);
     renderTabs();
-    saveDocsSoon();
+    saveDocsNow();
   }
 
   // ===== Find with highlight (safe + active match)
@@ -770,23 +770,46 @@ ed.addEventListener("input", () => {
   const d = getActive();
   if(!d) return;
 
+  // 0) Actualiza doc activo en memoria
   d.text = ed.value;
+  d.cursor = ed.selectionStart || 0;
+  d.scrollTop = ed.scrollTop || 0;
+  d.scrollLeft = ed.scrollLeft || 0;
 
-  // 1) Guardar instantáneo (autosave)
-  saveDocsNow();
+  // 1) Feedback INMEDIATO (honesto)
+  d.dirty = true;
+  dirtyDot.classList.remove("ok");
+  dirtyTxt.textContent = "Saving…";
+  refreshTitle();
+  renderTabs();
 
-  // 2) Estado: Saved (porque ya persistió)
-  setDirty(false);
-
-  // Si hay búsqueda activa, recalcula
+  // 2) Find (si está activo) + UI
   if(state.find.q){
     state.find.matches = computeMatches(ed.value, state.find.q);
-    findCount.textContent = String(state.find.matches.length);
     if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
+    findCount.textContent = String(state.find.matches.length);
   }
 
   renderHighlights();
   updateMeta();
+
+  // 3) Persistencia "casi instantánea" sin bloquear UI:
+  //    - guardamos en el siguiente tick
+  //    - luego marcamos Saved y persistimos ese estado también
+  queueMicrotask(() => {
+    // Guardar estado (incluye dirty:true)
+    saveDocsNow();
+
+    // Marcar como guardado (porque ya persistió)
+    d.dirty = false;
+    dirtyDot.classList.add("ok");
+    dirtyTxt.textContent = "Saved";
+    refreshTitle();
+    renderTabs();
+
+    // Persistir dirty:false (para que al recargar no vuelva a "sucio")
+    saveDocsNow();
+  });
 });
 
 
