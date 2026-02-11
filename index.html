@@ -1,311 +1,835 @@
 <!doctype html>
 <html lang="es">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>DOSPad</title>
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#000000">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DOSPad</title>
 
-<style>
-:root{
-  --bg:#000;
-  --fg:#00ff00;
-  --border:#1d1d1d;
-  --muted:#9aa;
-  --mono: ui-monospace, Consolas, Menlo, monospace;
-  --mark-bg: rgba(255,255,0,.25);
-}
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#000000">
 
-*{box-sizing:border-box}
-html,body{height:100%}
-body{
-  margin:0;
-  background:#000;
-  color:var(--fg);
-  font-family:var(--mono);
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-}
+  <style>
+    :root{
+      --bg:#000000;
+      --fg:#00ff00;
+      --muted:#9aa;
+      --border:#1d1d1d;
+      --panel:#070707;
+      --panel2:#050505;
+      --mono: ui-monospace, Consolas, Menlo, monospace;
 
-/* TOP */
-.top{
-  display:flex;gap:10px;flex-wrap:wrap;
-  padding:10px;border-bottom:1px solid var(--border);
-  background:#050505;
-}
-button,select,input[type="color"],input[type="text"]{
-  font-family:var(--mono);
-  background:#0a0a0a;
-  border:1px solid var(--border);
-  color:var(--fg);
-  padding:6px 10px;
-  border-radius:10px;
-  cursor:pointer;
-}
-button:active{transform:translateY(1px)}
-.group{display:flex;gap:6px;align-items:center;border:1px solid var(--border);padding:6px;border-radius:12px}
-.pill{font-size:12px;color:var(--muted);border:1px solid var(--border);padding:4px 8px;border-radius:999px}
-.spacer{flex:1}
+      --mark-bg: rgba(255,255,0,.22);
+      --mark-outline: rgba(255,255,0,.35);
+      --active-mark-bg: rgba(255,255,0,.45);
+      --active-mark-outline: rgba(255,255,0,.65);
+    }
 
-/* TABS */
-.tabs{
-  display:flex;gap:6px;padding:8px;
-  border-bottom:1px solid var(--border);
-  background:#030303;overflow:auto;
-}
-.tab{
-  padding:6px 10px;border:1px solid var(--border);
-  border-radius:10px;background:#070707;
-  cursor:pointer;display:flex;gap:6px;align-items:center;
-}
-.tab.active{border-color:var(--fg)}
-.tab button{padding:2px 6px;font-size:12px}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:#000;
+      color:var(--fg);
+      font-family:var(--mono);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
 
-/* EDITOR */
-.wrap{flex:1;display:flex;flex-direction:column;min-height:0}
-.editorShell{
-  position:relative;flex:1;min-height:0;
-}
+    /* Top bar */
+    .top{
+      display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+      padding:10px 12px;
+      border-bottom:1px solid var(--border);
+      background: var(--panel2);
+    }
 
-/* OVERLAY FIXED */
-.highlights,textarea{
-  position:absolute;inset:0;
-  padding:14px;
-  font-family:var(--mono);
-  font-size:15px;
-  line-height:1.5;
-  white-space:pre-wrap;
-  word-wrap:break-word;
-  tab-size:2;
-}
+    button, select, input[type="color"], input[type="text"]{
+      font-family:var(--mono);
+      border:1px solid var(--border);
+      background:#0a0a0a;
+      color:var(--fg);
+      padding:7px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:13px;
+    }
+    button:active{transform:translateY(1px)}
+    button[aria-pressed="false"]{opacity:.75}
+    button:disabled{opacity:.55; cursor:not-allowed}
 
-.highlights{
-  margin:0;
-  background:var(--bg);
-  color:var(--fg);
-  pointer-events:none;
-  overflow:hidden;
-  font-variant-ligatures:none;
-  font-kerning:none;
-}
+    .group{
+      display:flex; gap:8px; align-items:center;
+      border:1px solid var(--border);
+      background: var(--panel);
+      padding:6px 8px;
+      border-radius:14px;
+    }
+    .pill{
+      border:1px solid var(--border);
+      padding:6px 10px;
+      border-radius:999px;
+      color:var(--muted);
+      font-size:12px;
+      user-select:none;
+      background:#060606;
+    }
+    .pill strong{color:var(--fg)}
+    .spacer{flex:1}
 
-textarea{
-  background:transparent;
-  color:transparent;
-  -webkit-text-fill-color:transparent;
-  caret-color:var(--fg);
-  border:0;
-  outline:0;
-  resize:none;
-  overflow:auto;
-  font-variant-ligatures:none;
-  font-kerning:none;
-}
+    /* Tabs */
+    .tabs{
+      display:flex; gap:6px; align-items:center;
+      padding:8px 12px;
+      border-bottom:1px solid var(--border);
+      background:#030303;
+      overflow:auto;
+      white-space:nowrap;
+    }
+    .tab{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:6px 10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      background:#070707;
+      cursor:pointer;
+      user-select:none;
+    }
+    .tab.active{
+      border-color: color-mix(in srgb, var(--fg) 70%, var(--border));
+      box-shadow: 0 0 0 2px rgba(0,255,0,.08);
+    }
+    .tabName{
+      max-width:220px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .tabClose{
+      width:22px; height:22px;
+      display:inline-flex; align-items:center; justify-content:center;
+      border-radius:8px;
+      border:1px solid var(--border);
+      background:#0a0a0a;
+      font-size:12px;
+      line-height:1;
+    }
 
-mark{
-  background:var(--mark-bg);
-  color:inherit;
-  border-radius:4px;
-  padding:0 1px;
-}
+    /* Editor */
+    .wrap{flex:1; display:flex; flex-direction:column; min-height:0;}
+    .editorShell{
+      position:relative;
+      flex:1;
+      min-height:0;
+      border-bottom:1px solid var(--border);
+      background: var(--bg);
+    }
 
-/* STATUS */
-.status{
-  padding:6px 10px;
-  border-top:1px solid var(--border);
-  font-size:12px;
-  color:var(--muted);
-  display:flex;gap:12px;
-}
-</style>
+    /* Overlay layers — FIXED */
+    .highlights, textarea{
+      position:absolute;
+      inset:0;
+      padding:14px;
+      font-family:var(--mono);
+      font-size:15px;
+      line-height:1.5;
+      tab-size:2;
+      white-space:pre-wrap;
+      word-wrap:break-word;
+      overflow:auto;
+    }
+
+    .highlights{
+      margin:0;                 /* IMPORTANT */
+      pointer-events:none;
+      background:var(--bg);
+      color:var(--fg);
+      overflow:hidden;          /* IMPORTANT: avoid scrollbar width mismatch */
+      font-variant-ligatures:none;
+      font-kerning:none;
+    }
+
+    textarea{
+      background:transparent;
+      color:transparent;
+      -webkit-text-fill-color:transparent; /* IMPORTANT */
+      caret-color:var(--fg);
+      border:0;
+      outline:0;
+      resize:none;
+      font-variant-ligatures:none;
+      font-kerning:none;
+    }
+
+    /* Scanlines */
+    .scanlines::after{
+      content:"";
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,.03) 0px,
+        rgba(255,255,255,.03) 1px,
+        rgba(0,0,0,0) 2px,
+        rgba(0,0,0,0) 4px
+      );
+      mix-blend-mode: overlay;
+      opacity:.22;
+    }
+
+    mark{
+      background: var(--mark-bg);
+      outline: 1px solid var(--mark-outline);
+      color:inherit;
+      border-radius:4px;
+      padding:0 1px;
+    }
+    mark.active{
+      background: var(--active-mark-bg);
+      outline: 1px solid var(--active-mark-outline);
+    }
+
+    /* Status */
+    .status{
+      display:flex; gap:10px; align-items:center;
+      padding:8px 12px;
+      border-top:1px solid var(--border);
+      background: var(--panel2);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .dot{width:7px;height:7px;border-radius:999px;background:var(--muted)}
+    .dot.ok{background:var(--fg); box-shadow:0 0 10px var(--fg);}
+    .right{margin-left:auto; display:flex; gap:12px; align-items:center;}
+
+    /* Find bar */
+    .findbar{display:none; gap:8px; align-items:center;}
+    .findbar.show{display:flex}
+    .findbar input{cursor:text; width:min(320px, 55vw);}
+
+  </style>
 </head>
-
 <body>
 
-<div class="top">
-  <button id="newBtn">New</button>
-  <button id="openBtn">Open</button>
-  <button id="saveBtn">Save</button>
+  <div class="top">
+    <button id="btnNew" title="Ctrl+N">New</button>
+    <button id="btnOpen" title="Ctrl+O">Open</button>
+    <button id="btnSave" title="Ctrl+S">Save</button>
 
-  <div class="group">
-    <span class="pill">Find</span>
-    <input id="findInput" type="text" placeholder="Buscar... (Enter siguiente)">
+    <div class="group" title="Theme & look">
+      <span class="pill">Theme</span>
+      <select id="themeSel">
+        <option value="dos">DOS</option>
+        <option value="amber">Amber</option>
+        <option value="ice">Ice</option>
+        <option value="custom">Custom</option>
+      </select>
+
+      <input id="bgPick" type="color" title="Background" />
+      <input id="fgPick" type="color" title="Text" />
+
+      <button id="btnScan" aria-pressed="true" title="Toggle scanlines">Scanlines</button>
+    </div>
+
+    <div class="group" title="Font & wrap">
+      <span class="pill">Font</span>
+      <select id="fontSel">
+        <option>12</option><option>13</option><option selected>15</option><option>17</option><option>19</option><option>22</option>
+      </select>
+      <button id="btnWrap" aria-pressed="true" title="Toggle wrap">Wrap</button>
+    </div>
+
+    <div class="group" title="Find">
+      <span class="pill">Find</span>
+      <div class="findbar" id="findbar">
+        <input id="findInput" type="text" placeholder="Buscar… (Enter = Next)" />
+        <button id="btnFindNext">Next</button>
+        <button id="btnFindClose">Close</button>
+        <span class="pill" id="findCount">0</span>
+      </div>
+      <button id="btnFindToggle" aria-pressed="false" title="Ctrl+F">Ctrl+F</button>
+    </div>
+
+    <span class="pill">PWA: <strong id="pwaFlag">…</strong></span>
+    <div class="spacer"></div>
+    <span class="pill">Auto-save: <strong>ON</strong></span>
+
+    <input id="fileIn" type="file" accept=".txt,text/plain" hidden>
+    <a id="dl" hidden></a>
   </div>
 
-  <div class="spacer"></div>
-  <span class="pill">Autosave ON</span>
-  <input id="fileIn" type="file" hidden>
-  <a id="dl" hidden></a>
-</div>
+  <div class="tabs" id="tabs"></div>
 
-<div class="tabs" id="tabs"></div>
+  <div class="wrap">
+    <div class="editorShell scanlines" id="editorShell">
+      <pre class="highlights" id="highlights"></pre>
+      <textarea id="ed" spellcheck="false"></textarea>
+    </div>
 
-<div class="wrap">
-  <div class="editorShell">
-    <pre class="highlights" id="highlights"></pre>
-    <textarea id="ed"></textarea>
+    <div class="status">
+      <span class="dot ok" id="dirtyDot"></span>
+      <span id="dirtyTxt">Saved</span>
+      <span class="right">
+        <span id="meta">Ln 1, Col 1 · 0 chars</span>
+        <span class="pill" id="fileLabel">Untitled.txt</span>
+      </span>
+    </div>
   </div>
-
-  <div class="status">
-    <span id="meta">Ln 1, Col 1 · 0 chars</span>
-  </div>
-</div>
 
 <script>
 (() => {
+  // ===== Elements
+  const ed = document.getElementById("ed");
+  const highlights = document.getElementById("highlights");
+  const editorShell = document.getElementById("editorShell");
 
-const ed = document.getElementById("ed");
-const highlights = document.getElementById("highlights");
-const tabsEl = document.getElementById("tabs");
-const fileIn = document.getElementById("fileIn");
-const dl = document.getElementById("dl");
-const findInput = document.getElementById("findInput");
-const meta = document.getElementById("meta");
+  const tabsEl = document.getElementById("tabs");
+  const fileIn = document.getElementById("fileIn");
+  const dl = document.getElementById("dl");
 
-const KEY = "dospad.docs.v3";
+  const btnNew = document.getElementById("btnNew");
+  const btnOpen = document.getElementById("btnOpen");
+  const btnSave = document.getElementById("btnSave");
 
-let state = {
-  docs: [],
-  active: null,
-  find: ""
-};
+  const themeSel = document.getElementById("themeSel");
+  const bgPick = document.getElementById("bgPick");
+  const fgPick = document.getElementById("fgPick");
+  const btnScan = document.getElementById("btnScan");
 
-function uid(){ return Math.random().toString(16).slice(2); }
+  const fontSel = document.getElementById("fontSel");
+  const btnWrap = document.getElementById("btnWrap");
 
-function saveAll(){
-  localStorage.setItem(KEY, JSON.stringify(state));
-}
+  const btnFindToggle = document.getElementById("btnFindToggle");
+  const findbar = document.getElementById("findbar");
+  const findInput = document.getElementById("findInput");
+  const btnFindNext = document.getElementById("btnFindNext");
+  const btnFindClose = document.getElementById("btnFindClose");
+  const findCount = document.getElementById("findCount");
 
-function loadAll(){
-  const raw = localStorage.getItem(KEY);
-  if(raw){
-    state = JSON.parse(raw);
-  } else {
-    const d = {id:uid(), name:"Untitled.txt", text:""};
-    state.docs=[d];
-    state.active=d.id;
+  const dirtyDot = document.getElementById("dirtyDot");
+  const dirtyTxt = document.getElementById("dirtyTxt");
+  const meta = document.getElementById("meta");
+  const fileLabel = document.getElementById("fileLabel");
+  const pwaFlag = document.getElementById("pwaFlag");
+
+  // ===== Storage
+  const KEY_DOCS = "dospad.docs.v4";
+  const KEY_SETTINGS = "dospad.settings.v4";
+
+  // ===== Themes
+  const THEMES = {
+    dos:   {bg:"#000000", fg:"#00ff00"},
+    amber: {bg:"#000000", fg:"#ffb000"},
+    ice:   {bg:"#0b1020", fg:"#d6e4ff"}
+  };
+
+  // ===== State
+  const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
+
+  let settings = {
+    theme: "dos",
+    bg: THEMES.dos.bg,
+    fg: THEMES.dos.fg,
+    font: 15,
+    wrap: true,
+    scanlines: true
+  };
+
+  let state = {
+    docs: [],
+    activeId: null,
+    find: { q:"", matches:[], activeIdx:0 }
+  };
+
+  // ===== Helpers
+  function escapeHTML(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
-}
 
-function getActive(){
-  return state.docs.find(d=>d.id===state.active);
-}
-
-function renderTabs(){
-  tabsEl.innerHTML="";
-  for(const d of state.docs){
-    const t=document.createElement("div");
-    t.className="tab"+(d.id===state.active?" active":"");
-    t.textContent=d.name;
-    t.onclick=()=>switchTab(d.id);
-
-    const close=document.createElement("button");
-    close.textContent="×";
-    close.onclick=(e)=>{e.stopPropagation();closeTab(d.id);};
-    t.appendChild(close);
-    tabsEl.appendChild(t);
+  function getActive(){
+    return state.docs.find(d => d.id === state.activeId) || null;
   }
-  const add=document.createElement("button");
-  add.textContent="+";
-  add.onclick=newTab;
-  tabsEl.appendChild(add);
-}
 
-function switchTab(id){
-  const cur=getActive();
-  if(cur) cur.text=ed.value;
-  state.active=id;
-  const d=getActive();
-  ed.value=d.text;
-  renderTabs();
-  renderHighlights();
-  updateMeta();
-  saveAll();
-}
-
-function newTab(){
-  const d={id:uid(),name:"Untitled.txt",text:""};
-  state.docs.push(d);
-  state.active=d.id;
-  renderTabs();
-  switchTab(d.id);
-}
-
-function closeTab(id){
-  state.docs=state.docs.filter(d=>d.id!==id);
-  if(state.active===id) state.active=state.docs[0].id;
-  renderTabs();
-  switchTab(state.active);
-}
-
-function renderHighlights(){
-  const text=ed.value;
-  const q=state.find;
-  if(!q){
-    highlights.textContent=text;
-    return;
+  function setDirty(isDirty){
+    const d = getActive();
+    if(!d) return;
+    d.dirty = isDirty;
+    dirtyDot.classList.toggle("ok", !isDirty);
+    dirtyTxt.textContent = isDirty ? "Unsaved" : "Saved";
+    refreshTitle();
   }
-  const esc=q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-  const re=new RegExp(esc,"gi");
-  highlights.innerHTML=text.replace(re,m=>"<mark>"+m+"</mark>");
-}
 
-function updateMeta(){
-  const t=ed.value;
-  const i=ed.selectionStart||0;
-  const before=t.slice(0,i);
-  const line=before.split("\n").length;
-  const col=i-before.lastIndexOf("\n");
-  meta.textContent=`Ln ${line}, Col ${col} · ${t.length} chars`;
-}
+  function refreshTitle(){
+    const d = getActive();
+    if(!d) return;
+    const star = d.dirty ? " *" : "";
+    document.title = `DOSPad — ${d.name}${star}`;
+    fileLabel.textContent = d.name + star;
+  }
 
-function syncScroll(){
-  highlights.scrollTop=ed.scrollTop;
-  highlights.scrollLeft=ed.scrollLeft;
-}
+  function saveDocsSoon(){
+    clearTimeout(saveDocsSoon._t);
+    saveDocsSoon._t = setTimeout(() => {
+      localStorage.setItem(KEY_DOCS, JSON.stringify({
+        docs: state.docs,
+        activeId: state.activeId,
+        savedAt: Date.now()
+      }));
+    }, 200);
+  }
 
-ed.addEventListener("input",()=>{
-  getActive().text=ed.value;
-  renderHighlights();
-  updateMeta();
-  saveAll();
-});
+  function saveSettings(){
+    localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
+  }
 
-ed.addEventListener("scroll",syncScroll);
-ed.addEventListener("click",updateMeta);
-ed.addEventListener("keyup",updateMeta);
+  function loadAll(){
+    // settings
+    try{
+      const rawS = localStorage.getItem(KEY_SETTINGS);
+      if(rawS) settings = {...settings, ...JSON.parse(rawS)};
+    } catch {}
 
-findInput.addEventListener("input",()=>{
-  state.find=findInput.value;
-  renderHighlights();
-});
+    // docs
+    try{
+      const rawD = localStorage.getItem(KEY_DOCS);
+      if(rawD){
+        const pack = JSON.parse(rawD);
+        if(Array.isArray(pack.docs) && pack.docs.length){
+          state.docs = pack.docs;
+          state.activeId = pack.activeId || pack.docs[0].id;
+          return;
+        }
+      }
+    } catch {}
 
-document.getElementById("newBtn").onclick=newTab;
-document.getElementById("openBtn").onclick=()=>fileIn.click();
-document.getElementById("saveBtn").onclick=()=>{
-  const blob=new Blob([ed.value],{type:"text/plain"});
-  const url=URL.createObjectURL(blob);
-  dl.href=url;
-  dl.download=getActive().name;
-  dl.click();
-};
+    const first = { id: uid(), name:"Untitled.txt", text:"", dirty:false, cursor:0 };
+    state.docs = [first];
+    state.activeId = first.id;
+  }
 
-fileIn.onchange=async()=>{
-  const f=fileIn.files[0];
-  if(!f)return;
-  const text=await f.text();
-  const d={id:uid(),name:f.name,text};
-  state.docs.push(d);
-  state.active=d.id;
-  renderTabs();
-  switchTab(d.id);
-};
+  // ===== Apply UI settings
+  function applyColors(bg, fg){
+    document.documentElement.style.setProperty("--bg", bg);
+    document.documentElement.style.setProperty("--fg", fg);
+    ed.style.caretColor = fg;
+    bgPick.value = bg;
+    fgPick.value = fg;
+  }
 
-loadAll();
-renderTabs();
-switchTab(state.active);
+  function setTheme(name){
+    settings.theme = name;
+    if(name === "custom"){
+      applyColors(settings.bg, settings.fg);
+    } else {
+      const t = THEMES[name] || THEMES.dos;
+      settings.bg = t.bg;
+      settings.fg = t.fg;
+      applyColors(t.bg, t.fg);
+    }
+    saveSettings();
+    renderHighlights();
+  }
+
+  function setFont(px){
+    settings.font = px;
+    ed.style.fontSize = px + "px";
+    highlights.style.fontSize = px + "px";
+    saveSettings();
+    syncScroll();
+  }
+
+  function setWrap(on){
+    settings.wrap = on;
+    btnWrap.setAttribute("aria-pressed", String(on));
+    const ws = on ? "pre-wrap" : "pre";
+    ed.style.whiteSpace = ws;
+    highlights.style.whiteSpace = ws;
+    ed.style.overflowX = on ? "hidden" : "auto";
+    saveSettings();
+    renderHighlights();
+  }
+
+  function setScanlines(on){
+    settings.scanlines = on;
+    btnScan.setAttribute("aria-pressed", String(on));
+    editorShell.classList.toggle("scanlines", on);
+    saveSettings();
+  }
+
+  // ===== Tabs
+  function renderTabs(){
+    tabsEl.innerHTML = "";
+
+    for(const d of state.docs){
+      const tab = document.createElement("div");
+      tab.className = "tab" + (d.id === state.activeId ? " active" : "");
+      tab.title = d.name;
+      tab.onclick = () => switchTo(d.id);
+
+      const name = document.createElement("span");
+      name.className = "tabName";
+      name.textContent = d.name + (d.dirty ? " *" : "");
+
+      const close = document.createElement("button");
+      close.className = "tabClose";
+      close.textContent = "×";
+      close.title = "Close";
+      close.onclick = (e) => { e.stopPropagation(); closeTab(d.id); };
+
+      tab.appendChild(name);
+      tab.appendChild(close);
+      tabsEl.appendChild(tab);
+    }
+
+    const add = document.createElement("button");
+    add.textContent = "+";
+    add.title = "New tab";
+    add.onclick = () => newTab();
+    tabsEl.appendChild(add);
+  }
+
+  function switchTo(id){
+    const cur = getActive();
+    if(cur){
+      cur.cursor = ed.selectionStart || 0;
+      cur.text = ed.value;
+    }
+
+    state.activeId = id;
+    const d = getActive();
+    if(!d) return;
+
+    ed.value = d.text || "";
+    setDirty(!!d.dirty);
+    renderTabs();
+    refreshTitle();
+
+    // reset find highlight in new doc but keep query open
+    if(state.find.q){
+      state.find.matches = computeMatches(ed.value, state.find.q);
+      state.find.activeIdx = 0;
+      findCount.textContent = String(state.find.matches.length);
+    }
+
+    renderHighlights();
+    requestAnimationFrame(() => {
+      const c = Math.min(d.cursor || 0, ed.value.length);
+      ed.setSelectionRange(c, c);
+      updateMeta();
+      syncScroll();
+      ed.focus();
+    });
+
+    saveDocsSoon();
+  }
+
+  function newTab(){
+    const d = { id: uid(), name:"Untitled.txt", text:"", dirty:false, cursor:0 };
+    state.docs.push(d);
+    state.activeId = d.id;
+    renderTabs();
+    switchTo(d.id);
+  }
+
+  function closeTab(id){
+    if(state.docs.length === 1){
+      if(confirm("Cerrar la última pestaña borrará el contenido. ¿Continuar?")){
+        const d = state.docs[0];
+        d.text = "";
+        d.name = "Untitled.txt";
+        d.dirty = false;
+        d.cursor = 0;
+        switchTo(d.id);
+      }
+      return;
+    }
+
+    const d = state.docs.find(x => x.id === id);
+    if(d && d.dirty && !confirm(`"${d.name}" tiene cambios sin guardar. ¿Cerrar igual?`)) return;
+
+    const idx = state.docs.findIndex(x => x.id === id);
+    state.docs.splice(idx, 1);
+
+    if(state.activeId === id){
+      const newActive = state.docs[Math.max(0, idx - 1)];
+      state.activeId = newActive.id;
+      switchTo(state.activeId);
+    } else {
+      renderTabs();
+      saveDocsSoon();
+    }
+  }
+
+  // ===== File open/save
+  async function newFile(){
+    const d = getActive();
+    if(d && d.dirty && !confirm("Tienes cambios sin guardar. ¿Descartar?")) return;
+    d.text = "";
+    d.name = "Untitled.txt";
+    d.cursor = 0;
+    ed.value = "";
+    setDirty(false);
+    renderTabs();
+    renderHighlights();
+    updateMeta();
+    saveDocsSoon();
+  }
+
+  function openFile(){
+    fileIn.value = "";
+    fileIn.click();
+  }
+
+  fileIn.addEventListener("change", async () => {
+    const f = fileIn.files && fileIn.files[0];
+    if(!f) return;
+    const text = await f.text();
+    const d = { id: uid(), name: (f.name || "Untitled.txt"), text, dirty:false, cursor:0 };
+    state.docs.push(d);
+    state.activeId = d.id;
+    renderTabs();
+    switchTo(d.id);
+  });
+
+  function saveFile(){
+    const d = getActive();
+    if(!d) return;
+
+    const blob = new Blob([ed.value], {type:"text/plain;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    dl.href = url;
+    dl.download = d.name || "Untitled.txt";
+    dl.click();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+
+    d.text = ed.value;
+    setDirty(false);
+    renderTabs();
+    saveDocsSoon();
+  }
+
+  // ===== Find with highlight (safe + active match)
+  function computeMatches(text, q){
+    if(!q) return [];
+    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(esc, "gi");
+    const matches = [];
+    let m;
+    while((m = re.exec(text)) !== null){
+      matches.push({start: m.index, end: m.index + m[0].length});
+      if(m.index === re.lastIndex) re.lastIndex++;
+      if(matches.length > 5000) break;
+    }
+    return matches;
+  }
+
+  function renderHighlights(){
+    const text = ed.value || "";
+    const q = state.find.q || "";
+    const matches = state.find.matches || [];
+
+    if(!q || matches.length === 0){
+      highlights.textContent = text;
+      return;
+    }
+
+    let out = "";
+    let last = 0;
+
+    for(let i=0; i<matches.length; i++){
+      const {start,end} = matches[i];
+      out += escapeHTML(text.slice(last, start));
+      const cls = (i === state.find.activeIdx) ? ' class="active"' : "";
+      out += `<mark${cls}>` + escapeHTML(text.slice(start, end)) + `</mark>`;
+      last = end;
+    }
+
+    out += escapeHTML(text.slice(last));
+    highlights.innerHTML = out;
+  }
+
+  function openFind(){
+    btnFindToggle.setAttribute("aria-pressed","true");
+    findbar.classList.add("show");
+    findInput.focus();
+    findInput.select();
+  }
+
+  function closeFind(){
+    btnFindToggle.setAttribute("aria-pressed","false");
+    findbar.classList.remove("show");
+    state.find.q = "";
+    state.find.matches = [];
+    state.find.activeIdx = 0;
+    findCount.textContent = "0";
+    renderHighlights();
+    ed.focus();
+  }
+
+  function updateFind(){
+    state.find.q = findInput.value || "";
+    state.find.matches = computeMatches(ed.value, state.find.q);
+    state.find.activeIdx = 0;
+    findCount.textContent = String(state.find.matches.length);
+    renderHighlights();
+    if(state.find.matches.length) jumpToMatch(0);
+  }
+
+  function jumpToMatch(idx){
+    const m = state.find.matches[idx];
+    if(!m) return;
+    ed.focus();
+    ed.setSelectionRange(m.start, m.end);
+    state.find.activeIdx = idx;
+
+    // Scroll-ish
+    const before = ed.value.slice(0, m.start);
+    const line = before.split("\n").length;
+    ed.scrollTop = Math.max(0, (line - 3) * (settings.font * 1.45));
+    syncScroll();
+    updateMeta();
+    renderHighlights();
+  }
+
+  function findNext(){
+    if(!state.find.q){ updateFind(); return; }
+    if(!state.find.matches.length){ updateFind(); return; }
+    const next = (state.find.activeIdx + 1) % state.find.matches.length;
+    jumpToMatch(next);
+  }
+
+  // ===== Scroll sync
+  function syncScroll(){
+    highlights.scrollTop = ed.scrollTop;
+    highlights.scrollLeft = ed.scrollLeft;
+  }
+
+  // ===== Meta
+  function updateMeta(){
+    const t = ed.value;
+    const i = ed.selectionStart || 0;
+    const before = t.slice(0,i);
+    const line = before.split("\n").length;
+    const col = before.length - before.lastIndexOf("\n");
+    meta.textContent = `Ln ${line}, Col ${col} · ${t.length} chars`;
+  }
+
+  // ===== Events
+  btnNew.onclick = newFile;
+  btnOpen.onclick = openFile;
+  btnSave.onclick = saveFile;
+
+  themeSel.onchange = () => setTheme(themeSel.value);
+
+  bgPick.oninput = () => {
+    settings.theme = "custom";
+    themeSel.value = "custom";
+    settings.bg = bgPick.value;
+    applyColors(settings.bg, settings.fg);
+    saveSettings();
+    renderHighlights();
+  };
+
+  fgPick.oninput = () => {
+    settings.theme = "custom";
+    themeSel.value = "custom";
+    settings.fg = fgPick.value;
+    applyColors(settings.bg, settings.fg);
+    saveSettings();
+    renderHighlights();
+  };
+
+  btnScan.onclick = () => setScanlines(!settings.scanlines);
+
+  fontSel.onchange = () => setFont(parseInt(fontSel.value,10) || 15);
+  btnWrap.onclick = () => setWrap(!settings.wrap);
+
+  btnFindToggle.onclick = () => {
+    const on = findbar.classList.contains("show");
+    on ? closeFind() : openFind();
+  };
+  btnFindClose.onclick = closeFind;
+  btnFindNext.onclick = findNext;
+
+  findInput.addEventListener("input", updateFind);
+  findInput.addEventListener("keydown", (e) => {
+    if(e.key === "Enter"){ e.preventDefault(); findNext(); }
+    if(e.key === "Escape"){ e.preventDefault(); closeFind(); }
+  });
+
+  ed.addEventListener("scroll", syncScroll);
+  ed.addEventListener("click", updateMeta);
+  ed.addEventListener("keyup", updateMeta);
+
+  ed.addEventListener("input", () => {
+    const d = getActive();
+    if(!d) return;
+    d.text = ed.value;
+    setDirty(true);
+
+    if(state.find.q){
+      state.find.matches = computeMatches(ed.value, state.find.q);
+      findCount.textContent = String(state.find.matches.length);
+      if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
+    }
+
+    renderHighlights();
+    updateMeta();
+    saveDocsSoon();
+  });
+
+  // Shortcuts
+  window.addEventListener("keydown", (e) => {
+    if(!(e.ctrlKey || e.metaKey)) return;
+    const k = e.key.toLowerCase();
+
+    if(k === "s"){ e.preventDefault(); saveFile(); }
+    if(k === "o"){ e.preventDefault(); openFile(); }
+    if(k === "n"){ e.preventDefault(); newFile(); }
+    if(k === "f"){ e.preventDefault(); openFind(); }
+  });
+
+  // ===== PWA registration
+  async function initPWA(){
+    if(location.protocol === "file:"){
+      pwaFlag.textContent = "NO (file://)";
+      return;
+    }
+    if(!("serviceWorker" in navigator)){
+      pwaFlag.textContent = "NO SW";
+      return;
+    }
+    try{
+      const reg = await navigator.serviceWorker.register("./sw.js");
+      pwaFlag.textContent = reg.active ? "READY" : "OK";
+    } catch (err){
+      console.error(err);
+      pwaFlag.textContent = "SW FAIL";
+    }
+  }
+
+  // ===== Init
+  function init(){
+    loadAll();
+
+    // Apply settings to UI
+    themeSel.value = settings.theme || "dos";
+    applyColors(settings.bg, settings.fg);
+    if(themeSel.value !== "custom") setTheme(themeSel.value);
+
+    fontSel.value = String(settings.font || 15);
+    setFont(parseInt(fontSel.value,10) || 15);
+
+    setWrap(settings.wrap !== false);
+    setScanlines(settings.scanlines !== false);
+
+    renderTabs();
+    switchTo(state.activeId);
+
+    initPWA();
+  }
+
+  init();
 })();
 </script>
 
