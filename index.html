@@ -139,11 +139,11 @@
     }
 
     .highlights{
-      margin:0;                 /* IMPORTANT */
+      margin:0;
       pointer-events:none;
       background:var(--bg);
       color:var(--fg);
-      overflow:hidden;          /* IMPORTANT: avoid scrollbar width mismatch */
+      overflow:hidden;          /* avoids scrollbar mismatch */
       font-variant-ligatures:none;
       font-kerning:none;
     }
@@ -151,7 +151,7 @@
     textarea{
       background:transparent;
       color:transparent;
-      -webkit-text-fill-color:transparent; /* IMPORTANT */
+      -webkit-text-fill-color:transparent;
       caret-color:var(--fg);
       border:0;
       outline:0;
@@ -206,7 +206,6 @@
     .findbar{display:none; gap:8px; align-items:center;}
     .findbar.show{display:flex}
     .findbar input{cursor:text; width:min(320px, 55vw);}
-
   </style>
 </head>
 <body>
@@ -227,7 +226,6 @@
 
       <input id="bgPick" type="color" title="Background" />
       <input id="fgPick" type="color" title="Text" />
-
       <button id="btnScan" aria-pressed="true" title="Toggle scanlines">Scanlines</button>
     </div>
 
@@ -267,8 +265,8 @@
     </div>
 
     <div class="status">
-      <span class="dot ok" id="dirtyDot"></span>
-      <span id="dirtyTxt">Saved</span>
+      <span class="dot ok" id="saveDot"></span>
+      <span id="saveTxt">Saved</span>
       <span class="right">
         <span id="meta">Ln 1, Col 1 · 0 chars</span>
         <span class="pill" id="fileLabel">Untitled.txt</span>
@@ -278,7 +276,7 @@
 
 <script>
 (() => {
-  // ===== Elements
+  // Elements
   const ed = document.getElementById("ed");
   const highlights = document.getElementById("highlights");
   const editorShell = document.getElementById("editorShell");
@@ -306,24 +304,22 @@
   const btnFindClose = document.getElementById("btnFindClose");
   const findCount = document.getElementById("findCount");
 
-  const dirtyDot = document.getElementById("dirtyDot");
-  const dirtyTxt = document.getElementById("dirtyTxt");
+  const saveDot = document.getElementById("saveDot");
+  const saveTxt = document.getElementById("saveTxt");
   const meta = document.getElementById("meta");
   const fileLabel = document.getElementById("fileLabel");
   const pwaFlag = document.getElementById("pwaFlag");
 
-  // ===== Storage
-  const KEY_DOCS = "dospad.docs.v4";
-  const KEY_SETTINGS = "dospad.settings.v4";
+  // Storage keys (bump versions to avoid stale/old format)
+  const KEY_DOCS = "dospad.docs.v5";
+  const KEY_SETTINGS = "dospad.settings.v5";
 
-  // ===== Themes
   const THEMES = {
     dos:   {bg:"#000000", fg:"#00ff00"},
     amber: {bg:"#000000", fg:"#ffb000"},
     ice:   {bg:"#0b1020", fg:"#d6e4ff"}
   };
 
-  // ===== State
   const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 
   let settings = {
@@ -341,7 +337,7 @@
     find: { q:"", matches:[], activeIdx:0 }
   };
 
-  // ===== Helpers
+  // ---------- Helpers ----------
   function escapeHTML(s){
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
@@ -350,35 +346,48 @@
     return state.docs.find(d => d.id === state.activeId) || null;
   }
 
-  function setDirty(isDirty){
-    const d = getActive();
-    if(!d) return;
-    d.dirty = isDirty;
-    dirtyDot.classList.toggle("ok", !isDirty);
-    dirtyTxt.textContent = isDirty ? "Unsaved" : "Saved";
-    refreshTitle();
+  function setSaveStatus(mode){
+    // mode: "saving" | "saved" | "failed"
+    if(mode === "saving"){
+      saveDot.classList.remove("ok");
+      saveTxt.textContent = "Saving…";
+    } else if(mode === "saved"){
+      saveDot.classList.add("ok");
+      saveTxt.textContent = "Saved";
+    } else {
+      saveDot.classList.remove("ok");
+      saveTxt.textContent = "SAVE FAILED";
+    }
   }
 
   function refreshTitle(){
     const d = getActive();
     if(!d) return;
-    const star = d.dirty ? " *" : "";
-    document.title = `DOSPad — ${d.name}${star}`;
-    fileLabel.textContent = d.name + star;
+    document.title = `DOSPad — ${d.name}`;
+    fileLabel.textContent = d.name;
   }
 
-function saveDocsNow(){
-  localStorage.setItem(KEY_DOCS, JSON.stringify({
-    docs: state.docs,
-    activeId: state.activeId,
-    savedAt: Date.now()
-  }));
-}
-
-
+  function saveDocsNow(){
+    try{
+      localStorage.setItem(KEY_DOCS, JSON.stringify({
+        docs: state.docs,
+        activeId: state.activeId,
+        savedAt: Date.now()
+      }));
+      return true;
+    } catch (e){
+      console.error("SAVE FAILED:", e);
+      setSaveStatus("failed");
+      return false;
+    }
+  }
 
   function saveSettings(){
-    localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
+    try{
+      localStorage.setItem(KEY_SETTINGS, JSON.stringify(settings));
+    } catch (e){
+      console.error("SETTINGS SAVE FAILED:", e);
+    }
   }
 
   function loadAll(){
@@ -401,12 +410,12 @@ function saveDocsNow(){
       }
     } catch {}
 
-    const first = { id: uid(), name:"Untitled.txt", text:"", dirty:false, cursor:0 };
+    const first = { id: uid(), name:"Untitled.txt", text:"", cursor:0, scrollTop:0, scrollLeft:0 };
     state.docs = [first];
     state.activeId = first.id;
   }
 
-  // ===== Apply UI settings
+  // ---------- UI Settings ----------
   function applyColors(bg, fg){
     document.documentElement.style.setProperty("--bg", bg);
     document.documentElement.style.setProperty("--fg", fg);
@@ -455,10 +464,9 @@ function saveDocsNow(){
     saveSettings();
   }
 
-  // ===== Tabs
+  // ---------- Tabs ----------
   function renderTabs(){
     tabsEl.innerHTML = "";
-
     for(const d of state.docs){
       const tab = document.createElement("div");
       tab.className = "tab" + (d.id === state.activeId ? " active" : "");
@@ -467,7 +475,7 @@ function saveDocsNow(){
 
       const name = document.createElement("span");
       name.className = "tabName";
-      name.textContent = d.name + (d.dirty ? " *" : "");
+      name.textContent = d.name;
 
       const close = document.createElement("button");
       close.className = "tabClose";
@@ -487,23 +495,28 @@ function saveDocsNow(){
     tabsEl.appendChild(add);
   }
 
+  function snapshotActive(){
+    const d = getActive();
+    if(!d) return;
+    d.text = ed.value;
+    d.cursor = ed.selectionStart || 0;
+    d.scrollTop = ed.scrollTop || 0;
+    d.scrollLeft = ed.scrollLeft || 0;
+  }
+
   function switchTo(id){
-    const cur = getActive();
-    if(cur){
-      cur.cursor = ed.selectionStart || 0;
-      cur.text = ed.value;
-    }
+    // snapshot current tab before switching
+    snapshotActive();
+    saveDocsNow();
 
     state.activeId = id;
     const d = getActive();
     if(!d) return;
 
     ed.value = d.text || "";
-    setDirty(!!d.dirty);
-    renderTabs();
     refreshTitle();
+    renderTabs();
 
-    // reset find highlight in new doc but keep query open
     if(state.find.q){
       state.find.matches = computeMatches(ed.value, state.find.q);
       state.find.activeIdx = 0;
@@ -511,25 +524,23 @@ function saveDocsNow(){
     }
 
     renderHighlights();
-requestAnimationFrame(() => {
-  const c = Math.min(d.cursor || 0, ed.value.length);
-  ed.setSelectionRange(c, c);
-
-  // Restaurar scroll guardado
-  ed.scrollTop = d.scrollTop || 0;
-  ed.scrollLeft = d.scrollLeft || 0;
-
-  updateMeta();
-  syncScroll();
-  ed.focus();
-});
-
+    requestAnimationFrame(() => {
+      const c = Math.min(d.cursor || 0, ed.value.length);
+      ed.setSelectionRange(c, c);
+      ed.scrollTop = d.scrollTop || 0;
+      ed.scrollLeft = d.scrollLeft || 0;
+      updateMeta();
+      syncScroll();
+      ed.focus();
+    });
 
     saveDocsNow();
+    setSaveStatus("saved");
   }
 
   function newTab(){
-    const d = { id: uid(), name:"Untitled.txt", text:"", dirty:false, cursor:0 };
+    snapshotActive();
+    const d = { id: uid(), name:"Untitled.txt", text:"", cursor:0, scrollTop:0, scrollLeft:0 };
     state.docs.push(d);
     state.activeId = d.id;
     renderTabs();
@@ -542,42 +553,44 @@ requestAnimationFrame(() => {
         const d = state.docs[0];
         d.text = "";
         d.name = "Untitled.txt";
-        d.dirty = false;
         d.cursor = 0;
+        d.scrollTop = 0;
+        d.scrollLeft = 0;
         switchTo(d.id);
       }
       return;
     }
 
-    const d = state.docs.find(x => x.id === id);
-    if(d && d.dirty && !confirm(`"${d.name}" tiene cambios sin guardar. ¿Cerrar igual?`)) return;
-
     const idx = state.docs.findIndex(x => x.id === id);
+    if(idx < 0) return;
+
     state.docs.splice(idx, 1);
 
     if(state.activeId === id){
       const newActive = state.docs[Math.max(0, idx - 1)];
       state.activeId = newActive.id;
-      switchTo(state.activeId);
-    } else {
-      renderTabs();
-      saveDocsNow();
     }
+
+    renderTabs();
+    switchTo(state.activeId);
+    saveDocsNow();
   }
 
-  // ===== File open/save
+  // ---------- Open / Save ----------
   async function newFile(){
     const d = getActive();
-    if(d && d.dirty && !confirm("Tienes cambios sin guardar. ¿Descartar?")) return;
+    if(!d) return;
     d.text = "";
     d.name = "Untitled.txt";
     d.cursor = 0;
+    d.scrollTop = 0;
+    d.scrollLeft = 0;
     ed.value = "";
-    setDirty(false);
     renderTabs();
     renderHighlights();
     updateMeta();
     saveDocsNow();
+    setSaveStatus("saved");
   }
 
   function openFile(){
@@ -589,16 +602,23 @@ requestAnimationFrame(() => {
     const f = fileIn.files && fileIn.files[0];
     if(!f) return;
     const text = await f.text();
-    const d = { id: uid(), name: (f.name || "Untitled.txt"), text, dirty:false, cursor:0 };
+    snapshotActive();
+
+    const d = { id: uid(), name: (f.name || "Untitled.txt"), text, cursor:0, scrollTop:0, scrollLeft:0 };
     state.docs.push(d);
     state.activeId = d.id;
+
     renderTabs();
     switchTo(d.id);
+    saveDocsNow();
   });
 
   function saveFile(){
     const d = getActive();
     if(!d) return;
+
+    snapshotActive();
+    saveDocsNow();
 
     const blob = new Blob([ed.value], {type:"text/plain;charset=utf-8"});
     const url = URL.createObjectURL(blob);
@@ -607,13 +627,10 @@ requestAnimationFrame(() => {
     dl.click();
     setTimeout(() => URL.revokeObjectURL(url), 500);
 
-    d.text = ed.value;
-    setDirty(false);
-    renderTabs();
-    saveDocsNow();
+    setSaveStatus("saved");
   }
 
-  // ===== Find with highlight (safe + active match)
+  // ---------- Find ----------
   function computeMatches(text, q){
     if(!q) return [];
     const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -640,15 +657,13 @@ requestAnimationFrame(() => {
 
     let out = "";
     let last = 0;
-
-    for(let i=0; i<matches.length; i++){
+    for(let i=0;i<matches.length;i++){
       const {start,end} = matches[i];
       out += escapeHTML(text.slice(last, start));
       const cls = (i === state.find.activeIdx) ? ' class="active"' : "";
       out += `<mark${cls}>` + escapeHTML(text.slice(start, end)) + `</mark>`;
       last = end;
     }
-
     out += escapeHTML(text.slice(last));
     highlights.innerHTML = out;
   }
@@ -687,7 +702,6 @@ requestAnimationFrame(() => {
     ed.setSelectionRange(m.start, m.end);
     state.find.activeIdx = idx;
 
-    // Scroll-ish
     const before = ed.value.slice(0, m.start);
     const line = before.split("\n").length;
     ed.scrollTop = Math.max(0, (line - 3) * (settings.font * 1.45));
@@ -703,13 +717,12 @@ requestAnimationFrame(() => {
     jumpToMatch(next);
   }
 
-  // ===== Scroll sync
+  // ---------- Scroll / Meta ----------
   function syncScroll(){
     highlights.scrollTop = ed.scrollTop;
     highlights.scrollLeft = ed.scrollLeft;
   }
 
-  // ===== Meta
   function updateMeta(){
     const t = ed.value;
     const i = ed.selectionStart || 0;
@@ -719,7 +732,7 @@ requestAnimationFrame(() => {
     meta.textContent = `Ln ${line}, Col ${col} · ${t.length} chars`;
   }
 
-  // ===== Events
+  // ---------- Events ----------
   btnNew.onclick = newFile;
   btnOpen.onclick = openFile;
   btnSave.onclick = saveFile;
@@ -762,92 +775,61 @@ requestAnimationFrame(() => {
     if(e.key === "Escape"){ e.preventDefault(); closeFind(); }
   });
 
-  ed.addEventListener("scroll", syncScroll);
+  ed.addEventListener("scroll", () => { syncScroll(); snapshotActive(); saveDocsNow(); });
   ed.addEventListener("click", updateMeta);
   ed.addEventListener("keyup", updateMeta);
 
-ed.addEventListener("input", () => {
-  const d = getActive();
-  if(!d) return;
+  // INPUT (atomic + fast)
+  ed.addEventListener("input", () => {
+    const d = getActive();
+    if(!d) return;
 
-  // 0) Actualiza doc activo en memoria
-  d.text = ed.value;
-  d.cursor = ed.selectionStart || 0;
-  d.scrollTop = ed.scrollTop || 0;
-  d.scrollLeft = ed.scrollLeft || 0;
-
-  // 1) Feedback INMEDIATO (honesto)
-  d.dirty = true;
-  dirtyDot.classList.remove("ok");
-  dirtyTxt.textContent = "Saving…";
-  refreshTitle();
-  renderTabs();
-
-  // 2) Find (si está activo) + UI
-  if(state.find.q){
-    state.find.matches = computeMatches(ed.value, state.find.q);
-    if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
-    findCount.textContent = String(state.find.matches.length);
-  }
-
-  renderHighlights();
-  updateMeta();
-
-  // 3) Persistencia "casi instantánea" sin bloquear UI:
-  //    - guardamos en el siguiente tick
-  //    - luego marcamos Saved y persistimos ese estado también
-  queueMicrotask(() => {
-    // Guardar estado (incluye dirty:true)
-    saveDocsNow();
-
-    // Marcar como guardado (porque ya persistió)
-    d.dirty = false;
-    dirtyDot.classList.add("ok");
-    dirtyTxt.textContent = "Saved";
-    refreshTitle();
-    renderTabs();
-
-    // Persistir dirty:false (para que al recargar no vuelva a "sucio")
-    saveDocsNow();
-  });
-});
-
-
-function flushSaveNow(){
-  const d = getActive();
-  if(d){
     d.text = ed.value;
     d.cursor = ed.selectionStart || 0;
     d.scrollTop = ed.scrollTop || 0;
     d.scrollLeft = ed.scrollLeft || 0;
+
+    setSaveStatus("saving");
+
+    if(state.find.q){
+      state.find.matches = computeMatches(ed.value, state.find.q);
+      if(state.find.activeIdx >= state.find.matches.length) state.find.activeIdx = 0;
+      findCount.textContent = String(state.find.matches.length);
+    }
+
+    renderHighlights();
+    updateMeta();
+
+    cancelAnimationFrame(ed._saveRAF);
+    ed._saveRAF = requestAnimationFrame(() => {
+      const ok = saveDocsNow();
+      if(ok) setSaveStatus("saved");
+      refreshTitle();
+      renderTabs();
+    });
+  });
+
+  // Flush on hide/unload
+  function flushSaveNow(){
+    snapshotActive();
+    saveDocsNow();
   }
-  localStorage.setItem(KEY_DOCS, JSON.stringify({
-    docs: state.docs,
-    activeId: state.activeId,
-    savedAt: Date.now()
-  }));
-}
+  window.addEventListener("pagehide", flushSaveNow);
+  document.addEventListener("visibilitychange", () => {
+    if(document.visibilityState === "hidden") flushSaveNow();
+  });
 
-window.addEventListener("beforeunload", flushSaveNow);
-// Mejor para móviles/PWA:
-window.addEventListener("pagehide", flushSaveNow);
-document.addEventListener("visibilitychange", () => {
-  if(document.visibilityState === "hidden") flushSaveNow();
-});
-
-  
   // Shortcuts
   window.addEventListener("keydown", (e) => {
     if(!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
-
     if(k === "s"){ e.preventDefault(); saveFile(); }
     if(k === "o"){ e.preventDefault(); openFile(); }
-    if(k === "n"){ e.preventDefault(); newFile(); }
+    if(k === "n"){ e.preventDefault(); newTab(); }
     if(k === "f"){ e.preventDefault(); openFind(); }
   });
 
-  // ===== PWA registration
+  // PWA
   async function initPWA(){
     if(location.protocol === "file:"){
       pwaFlag.textContent = "NO (file://)";
@@ -866,11 +848,10 @@ document.addEventListener("visibilitychange", () => {
     }
   }
 
-  // ===== Init
+  // Init
   function init(){
     loadAll();
 
-    // Apply settings to UI
     themeSel.value = settings.theme || "dos";
     applyColors(settings.bg, settings.fg);
     if(themeSel.value !== "custom") setTheme(themeSel.value);
@@ -883,13 +864,11 @@ document.addEventListener("visibilitychange", () => {
 
     renderTabs();
     switchTo(state.activeId);
-
     initPWA();
   }
 
   init();
 })();
 </script>
-
 </body>
 </html>
